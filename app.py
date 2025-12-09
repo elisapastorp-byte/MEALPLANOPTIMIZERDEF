@@ -718,21 +718,33 @@ def main():
             # Charts
             st.subheader("Cost per day")
             if "day_name" in plan.columns and "price" in plan.columns:
+                ordered_days = list(DAY_NAMES.values())
+            
                 cost_per_day = (
                     plan.groupby("day_name")["price"]
                     .sum()
-                    .reindex(DAY_NAMES.values(), fill_value=0)
+                    .reindex(ordered_days, fill_value=0)
                 )
-                st.bar_chart(cost_per_day)
-
+            
+                # Ensure correct ordered index
+                cost_per_day.index = pd.Categorical(cost_per_day.index, categories=ordered_days, ordered=True)
+            
+                st.bar_chart(cost_per_day.sort_index())
+            
+            
             st.subheader("Calories per day")
             if "day_name" in plan.columns and "calories_kcal" in plan.columns:
+                ordered_days = list(DAY_NAMES.values())
+            
                 cal_per_day = (
                     plan.groupby("day_name")["calories_kcal"]
                     .sum()
-                    .reindex(DAY_NAMES.values(), fill_value=0)
+                    .reindex(ordered_days, fill_value=0)
                 )
-                st.bar_chart(cal_per_day)
+            
+                cal_per_day.index = pd.Categorical(cal_per_day.index, categories=ordered_days, ordered=True)
+            
+                st.bar_chart(cal_per_day.sort_index())
 
     else:
         st.info(
