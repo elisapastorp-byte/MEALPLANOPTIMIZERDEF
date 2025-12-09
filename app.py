@@ -3,7 +3,7 @@ import pulp as pl
 import streamlit as st
 
 # --------------------------------------------------
-# Configuración básica
+# Basic configuration
 # --------------------------------------------------
 
 DAY_NAMES = {
@@ -17,7 +17,7 @@ DAY_NAMES = {
 }
 MEAL_TYPES = ["lunch", "dinner"]
 
-# Columnas que usa el modelo (las de tu Colab)
+# Columnns for the model
 REQUIRED_COLUMNS = [
     "Restaurant", "Meal", "price",
     "calories_kcal", "protein_g", "fat_g", "sugar_g",
@@ -34,7 +34,7 @@ REQUIRED_COLUMNS = [
 
 
 # --------------------------------------------------
-# Carga de datos (con CSV propio o por defecto)
+# Data uploading - if not default document
 # --------------------------------------------------
 
 def load_meal_data(uploaded_file):
@@ -49,10 +49,10 @@ def load_meal_data(uploaded_file):
         df = pd.read_csv("lunchplandef3.csv")
         source = "default file (lunchplandef3.csv)"
 
-    # Normalizar nombres de columnas (quitar espacios al principio y al final)
+    # Normalizing columns name
     df = df.rename(columns={c: c.strip() for c in df.columns})
 
-    # Comprobar columnas necesarias
+    # checking required columns
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(
@@ -65,7 +65,7 @@ def load_meal_data(uploaded_file):
 
 
 # --------------------------------------------------
-# Modelo de optimización = versión Colab (goal programming)
+# optimization model - goal programming
 # --------------------------------------------------
 
 def solve_smart_dining(df, gender, weekly_budget, prefs):
@@ -78,7 +78,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     """
 
     # --------------------
-    # 0. Parámetros Q_* (preguntas)
+    # parameters for queestions
     # --------------------
     q_diabetic      = prefs.get("diabetic", False)
     q_vegan         = prefs.get("vegan", False)
@@ -105,7 +105,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     q_avoid_fried   = prefs.get("avoid_fried", False)
 
     # --------------------
-    # 1. Filtros sobre el dataset (constraints 1–19)
+    # 1. Applying filters to the dataset (constraints 1–19)
     # --------------------
     filtered = df.copy()
 
@@ -173,7 +173,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         return None, f"Not enough meals after filtering. Only {len(filtered)} meals available."
 
     # --------------------
-    # 2. Targets nutricionales por género (igual que Colab)
+    # 2. Nutritional targets
     # --------------------
     if gender == "male":
         cal_min       = 1100
@@ -203,7 +203,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         iron_min      = 18
         sodium_max    = 2300
 
-    else:  # por si algún día pones "other"
+    else:  
         cal_min       = 1000
         cal_max       = 1500
         protein_min   = 45
@@ -218,7 +218,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         sodium_max    = 2300
 
     # --------------------
-    # 3. Conjuntos y variables
+    # 3. variables definition
     # --------------------
     meal_indices = list(filtered.index)          # I
     days = range(7)                              # D = {0..6}
@@ -244,11 +244,11 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         for m in meals
     )
 
-    # Presupuesto semanal (coste como restricción)
+    # weekly budget 
     prob += total_cost <= weekly_budget, "B1_BudgetMaxWeeklyCost"
 
     # --------------------
-    # 4. Goal programming: variables de desviación y restricciones blandas
+    # 4. Goal programming: deviation variables and soft constraints
     # --------------------
     d_cal_under   = {d: pl.LpVariable(f"d_cal_under_day{d}",     lowBound=0) for d in days}
     d_cal_over    = {d: pl.LpVariable(f"d_cal_over_day{d}",      lowBound=0) for d in days}
@@ -304,7 +304,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
             for i in meal_indices for m in meals
         )
 
-        # 6–16: restricciones suaves con desviaciones
+        # 6–16: soft constraints
         prob += calories_day + d_cal_under[d]    >= cal_min,       f"C6_CalMinSoft_day{d}"
         prob += calories_day - d_cal_over[d]     <= cal_max,       f"C7_CalMaxSoft_day{d}"
         prob += protein_day + d_prot_under[d]    >= protein_min,   f"C8_ProtMinSoft_day{d}"
@@ -318,7 +318,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         prob += sodium_day - d_sodium_over[d]    <= sodium_max,    f"C16_SodiumMaxSoft_day{d}"
 
     # --------------------
-    # 5. Restricciones “CONSTRAINTS” (C1–C34, como en Colab)
+    # 5. "HARD CONSTRAINTS” (C1–C34)
     # --------------------
 
     # 1) Exactamente 1 plato por (día, comida)
@@ -625,7 +625,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
                 f"C34_OrLowSodium_day{d}"
 
     # --------------------
-    # 6. OBJETIVO DE GOAL PROGRAMMING
+    # 6. GOAL PROGRAMMING - OBJECTIVE
     # --------------------
     total_deviation = pl.lpSum(
         d_cal_under[d]  + d_cal_over[d]  +
@@ -643,7 +643,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     prob += W_NUTRITION * total_deviation + W_COST * total_cost, "GoalObjective"
 
     # --------------------
-    # 7. Resolver y construir plan
+    # 7. SOLVING AND BUILDING PLAN
     # --------------------
     solver = pl.PULP_CBC_CMD(msg=False, timeLimit=60, gapRel=0.01)
     prob.solve(solver)
@@ -686,12 +686,9 @@ def main():
         layout="wide",
     )
 
-    st.title("Smart Dining on Campus - Weekly Planner (Goal Programming)")
+    st.title("Smart Dining - Weekly Planner")
     st.markdown(
-        "This dashboard builds a **7-day lunch & dinner plan** with the **same "
-        "optimization model as your Colab**: goal programming that prioritizes "
-        "nutrition (deviation minimization) and then cost, with variety and "
-        "business-style constraints."
+        "This dashboard builds a **7-day lunch & dinner plan"
     )
 
     # Sidebar: inputs
@@ -729,7 +726,7 @@ def main():
         step=5.0,
     )
 
-    # Preguntas equivalentes a tu Colab
+    # QUESTIONS
     st.sidebar.subheader("Health / conditions")
     diabetic = st.sidebar.checkbox("Diabetic (diabetic-friendly meals)", value=False)
 
@@ -815,7 +812,7 @@ def main():
             c2.metric("Avg daily cost (USD)", f"{kpis['avg_daily_cost']:.2f}")
             c3.metric("Avg daily calories (kcal)", f"{kpis['avg_daily_calories']:.0f}")
 
-            # Plan detallado
+            # Detailed plan
             st.subheader("Weekly meal plan")
             display_cols = [
                 "day_name", "meal_type",
@@ -826,7 +823,7 @@ def main():
             existing = [c for c in display_cols if c in plan.columns]
             st.dataframe(plan[existing].sort_values(["day", "meal_type"]))
 
-            # Gráficos
+            # Graphs
             st.subheader("Cost per day")
             cost_per_day = (
                 plan.groupby("day_name")["price"]
