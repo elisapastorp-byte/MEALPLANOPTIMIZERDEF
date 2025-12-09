@@ -2,10 +2,9 @@
 
 An interactive Streamlit dashboard that generates a personalized weekly meal plan using a goal-programming optimization model. The system balances nutritional requirements, dietary restrictions, preferences, and budget constraints, creating 14 optimized meals (lunch + dinner for 7 days).
 
-Users interact only through a clean graphical interface while the optimization runs in the background.
 
 **Live Dashboard:**  
-👉 https://mealplanoptimizerdef-apr9stfdwfffpbx7kycubn.streamlit.app/
+ https://mealplanoptimizerdef-apr9stfdwfffpbx7kycubn.streamlit.app/
 
 ---
 
@@ -79,7 +78,6 @@ The system will:
 3. Solve a mixed-integer goal-programming optimization model  
 4. Display the weekly plan and performance metrics  
 
-No solver output or code is shown to the user — the dashboard behaves as a standalone decision-support tool.
 
 ---
 
@@ -90,12 +88,7 @@ The dashboard presents the results through several sections:
 ### **Key Performance Indicators (KPIs)**
 - Total weekly cost  
 - Average daily cost  
-- Average daily calories  
-
-### **Graphs**
-- **Cost per day**  
-- **Calories per day**  
-Both charts are displayed in chronological order: **Monday → Sunday**.
+- Average daily calories
 
 ### **Weekly Meal Plan Table**
 For each meal (lunch & dinner) the table shows:
@@ -110,11 +103,18 @@ For each meal (lunch & dinner) the table shows:
 The table is sorted and easy to interpret.  
 A **CSV export** option allows users to download the optimized plan.
 
+### **Graphs**
+- **Cost per day**  
+- **Calories per day**  
+Both charts are displayed in chronological order: **Monday → Sunday**.
+
+
+
 ---
 
 ## 5. CSV Format Requirements
 
-Uploaded datasets **must include** these columns:
+In case of uploading a cvs, it **must include** these columns:
 
 ### **Core fields**
 - `Restaurant`, `Meal`, `price`
@@ -132,7 +132,6 @@ Uploaded datasets **must include** these columns:
 - `calcium_mg`, `fiber_mg`, `cholesterol_mg`
 - `potassium_mg`, `iron_mg`, `sodium_mg`
 
-The model automatically rejects meals priced below $5 to avoid selecting side dishes.
 
 ---
 
@@ -154,7 +153,6 @@ The dashboard uses a mixed-integer programming model with:
 - Consecutive-day consumption limits  
 - Preference-based filtering  
 
-The model is solved using the CBC solver through PuLP.
 
 ---
 
@@ -165,22 +163,11 @@ The model is solved using the CBC solver through PuLP.
 - **Pandas** — data handling  
 - **Plotly / Streamlit Charts** — visual analytics  
 
----
-
-## 8. Business Applications
-
-The tool demonstrates how optimization can support:
-
-- University dining services  
-- Corporate wellness programs  
-- Menu planning under nutritional and budgetary constraints  
-- Health-focused decision support systems  
 
 ---
 
 ## 9. Links
 
 - **Live App:** https://mealplanoptimizerdef-apr9stfdwfffpbx7kycubn.streamlit.app/  
-- **Repository:** *Add your GitHub repo link here*
 
 ---
