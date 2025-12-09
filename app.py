@@ -134,6 +134,10 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     if q_avoid_fried:
         filtered = filtered[filtered["fried"] == 0]
 
+    # Price filter: ignore meals cheaper than 5 USD - to avoid error
+    filtered = filtered[filtered["price"] >= 5].copy()
+
+
     if len(filtered) < 14:
         return None, f"Not enough meals after filtering. Only {len(filtered)} meals available."
 
@@ -694,14 +698,22 @@ def main():
 
             # Weekly plan table (no sort_values to avoid key errors)
             st.subheader("Weekly meal plan")
+            
             display_cols = [
                 "day", "day_name", "meal_type",
                 "Restaurant", "Meal",
                 "price", "calories_kcal",
                 "protein_g", "fat_g", "sugar_g",
             ]
+            
             existing = [c for c in display_cols if c in plan.columns]
-            st.dataframe(plan[existing])
+            df_to_show = plan[existing].copy()
+            
+            # Sort by day (0–6) and then by meal_type (lunch / dinner)
+            if "day" in df_to_show.columns and "meal_type" in df_to_show.columns:
+                df_to_show = df_to_show.sort_values(["day", "meal_type"]).reset_index(drop=True)
+            
+            st.dataframe(df_to_show)
 
             # Charts
             st.subheader("Cost per day")
