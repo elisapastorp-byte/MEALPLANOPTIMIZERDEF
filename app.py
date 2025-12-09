@@ -576,25 +576,28 @@ def main():
         "since the problem is already adjusted to your max budget"
     )
 
-        # Offer README.md as a downloadable user guide
+
+    # --- User guide download at the top ---
     try:
-        with open("README.md", "r", encoding="utf-8") as f:
-            readme_text = f.read()
+        with open("guide_download.pdf", "rb") as f:
+            pdf_bytes = f.read()
 
         st.info(
-            "New to this app? Download the user guide (README) for instructions."
+            "New to this app? You can download a short PDF user guide "
+            "explaining how to use the dashboard."
         )
 
         st.download_button(
-            label="📘 Download User Guide (Markdown)",
-            data=readme_text,
-            file_name="SmartDining_UserGuide.md",
-            mime="text/markdown"
+            label="📄 Download User Guide (PDF)",
+            data=pdf_bytes,
+            file_name="Smart_Dining_Optimizer_User_Guide.pdf",
+            mime="application/pdf",
         )
     except FileNotFoundError:
         st.warning(
-            "User guide README.md not found in the server."
+            "User guide PDF (guide_download.pdf) was not found on the server."
         )
+
 
     # Sidebar inputs
     st.sidebar.header("User & Preferences")
