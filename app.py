@@ -2,7 +2,7 @@ import pandas as pd
 import pulp as pl
 import streamlit as st
 
-# Columns required in the CSV (exact names, including spaces and suffixes)
+# ---------- Required columns in the CSV ----------
 REQUIRED_COLUMNS = [
     'Restaurant', 'Meal', 'price', 'calories_kcal', 'protein_g', 'fat_g',
     'sugar_g', 'contains_gluten', 'contains_lactose', 'diabetic_friendly',
@@ -27,6 +27,8 @@ DAY_NAMES = {
 MEAL_TYPES = ["lunch", "dinner"]
 
 
+# ---------- Data loading ----------
+
 def load_meal_data(uploaded_file):
     """
     Load CSV either from user upload or from the default file.
@@ -50,6 +52,8 @@ def load_meal_data(uploaded_file):
     return df, source
 
 
+# ---------- Filters ----------
+
 def apply_filters(df, gender, prefs):
     """Apply dietary filters based on user preferences."""
     filtered = df.copy()
@@ -62,8 +66,7 @@ def apply_filters(df, gender, prefs):
     if prefs.get("nut_allergy"):
         filtered = filtered[filtered["contains_nuts"] == 0]
 
-    # Diet type
-    # NOTE: vegan column has a space in the name: 'vegan '
+    # Diet type  (ojo: la columna 'vegan ' tiene espacio al final)
     if prefs.get("vegan"):
         filtered = filtered[filtered["vegan "] == 1]
     if prefs.get("vegetarian"):
@@ -121,6 +124,8 @@ def apply_filters(df, gender, prefs):
 
     return filtered.reset_index(drop=True), bounds
 
+
+# ---------- Optimization model ----------
 
 def optimize_weekly_plan(filtered, weekly_budget, bounds):
     """Run a simple min-cost optimization with daily nutritional bounds."""
@@ -216,12 +221,18 @@ def optimize_weekly_plan(filtered, weekly_budget, bounds):
     # KPIs
     kpis = {
         "total_cost": plan["price"].sum(),
-        "avg_daily_cost": plan.groupby("day")["price"].sum().mean(),
-        "avg_daily_calories": plan.groupby("day")["calories_kcal"].sum().mean(),
+        "avg_daily_cost": plan.groupby("day")["price"].sum().mean()
+        if "day" in plan.columns
+        else float("nan"),
+        "avg_daily_calories": plan.groupby("day")["calories_kcal"].sum().mean()
+        if "day" in plan.columns
+        else float("nan"),
     }
 
     return {"plan": plan, "kpis": kpis, "status": status}, None
 
+
+# ---------- Streamlit app ----------
 
 def main():
     st.set_page_config(
@@ -332,7 +343,6 @@ def main():
 
         if error:
             st.error(error)
-            
         else:
             plan = result["plan"]
             kpis = result["kpis"]
@@ -343,15 +353,20 @@ def main():
             st.subheader("Key Performance Indicators")
             kpi_cols = st.columns(3)
             kpi_cols[0].metric("Total weekly cost (USD)", f"{kpis['total_cost']:.2f}")
-            kpi_cols[1].metric("Avg daily cost (USD)", f"{kpis['avg_daily_cost']:.2f}")
+            kpi_cols[1].metric(
+                "Avg daily cost (USD)",
+                "N/A" if pd.isna(kpis["avg_daily_cost"]) else f"{kpis['avg_daily_cost']:.2f}",
+            )
             kpi_cols[2].metric(
-                "Avg daily calories (kcal)", f"{kpis['avg_daily_calories']:.0f}"
+                "Avg daily calories (kcal)",
+                "N/A"
+                if pd.isna(kpis["avg_daily_calories"])
+                else f"{kpis['avg_daily_calories']:.0f}",
             )
 
-            # ---------- Weekly meal plan (tabla robusta) ----------
+            # ---------- Weekly meal plan (no sorting) ----------
             st.subheader("Weekly meal plan")
 
-            # Columnas que queremos mostrar, pero solo usamos las que existan
             desired_cols = [
                 "day_name",
                 "meal_type",
@@ -372,12 +387,7 @@ def main():
                 )
             else:
                 df_to_show = plan[existing_display_cols].copy()
-
-                # Ordenar solo por las columnas que realmente existan
-                sort_cols = [c for c in ["day", "meal_type"] if c in plan.columns]
-                if sort_cols:
-                    df_to_show = df_to_show.sort_values(sort_cols)
-
+                # NO sort_values here
                 st.dataframe(df_to_show)
 
             # ---------- Charts ----------
@@ -408,19 +418,6 @@ def main():
                     "Cannot plot calories per day because 'day_name' or "
                     "'calories_kcal' is missing from the optimized plan."
                 )
-
-            # Charts
-            st.subheader("Cost per day")
-            cost_per_day = (
-                plan.groupby("day_name")["price"].sum().reindex(DAY_NAMES.values())
-            )
-            st.bar_chart(cost_per_day)
-
-            st.subheader("Calories per day")
-            cal_per_day = (
-                plan.groupby("day_name")["calories_kcal"].sum().reindex(DAY_NAMES.values())
-            )
-            st.bar_chart(cal_per_day)
 
     else:
         st.info(
