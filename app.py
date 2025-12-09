@@ -332,13 +332,14 @@ def main():
 
         if error:
             st.error(error)
+            
         else:
             plan = result["plan"]
             kpis = result["kpis"]
 
             st.success(f"Optimization completed. Status: {result['status']}")
 
-            # KPIs
+            # ---------- KPIs ----------
             st.subheader("Key Performance Indicators")
             kpi_cols = st.columns(3)
             kpi_cols[0].metric("Total weekly cost (USD)", f"{kpis['total_cost']:.2f}")
@@ -347,23 +348,66 @@ def main():
                 "Avg daily calories (kcal)", f"{kpis['avg_daily_calories']:.0f}"
             )
 
-            # Detailed plan
+            # ---------- Weekly meal plan (tabla robusta) ----------
             st.subheader("Weekly meal plan")
-            st.dataframe(
-                plan[
-                    [
-                        "day_name",
-                        "meal_type",
-                        "Restaurant",
-                        "Meal",
-                        "price",
-                        "calories_kcal",
-                        "protein_g",
-                        "fat_g",
-                        "sugar_g",
-                    ]
-                ].sort_values(["day", "meal_type"])
-            )
+
+            # Columnas que queremos mostrar, pero solo usamos las que existan
+            desired_cols = [
+                "day_name",
+                "meal_type",
+                "Restaurant",
+                "Meal",
+                "price",
+                "calories_kcal",
+                "protein_g",
+                "fat_g",
+                "sugar_g",
+            ]
+            existing_display_cols = [c for c in desired_cols if c in plan.columns]
+
+            if not existing_display_cols:
+                st.warning(
+                    "No displayable columns found in the solution. "
+                    "Please check your dataset structure."
+                )
+            else:
+                df_to_show = plan[existing_display_cols].copy()
+
+                # Ordenar solo por las columnas que realmente existan
+                sort_cols = [c for c in ["day", "meal_type"] if c in plan.columns]
+                if sort_cols:
+                    df_to_show = df_to_show.sort_values(sort_cols)
+
+                st.dataframe(df_to_show)
+
+            # ---------- Charts ----------
+            st.subheader("Cost per day")
+            if "day_name" in plan.columns and "price" in plan.columns:
+                cost_per_day = (
+                    plan.groupby("day_name")["price"]
+                    .sum()
+                    .reindex(DAY_NAMES.values(), fill_value=0)
+                )
+                st.bar_chart(cost_per_day)
+            else:
+                st.info(
+                    "Cannot plot cost per day because 'day_name' or 'price' "
+                    "is missing from the optimized plan."
+                )
+
+            st.subheader("Calories per day")
+            if "day_name" in plan.columns and "calories_kcal" in plan.columns:
+                cal_per_day = (
+                    plan.groupby("day_name")["calories_kcal"]
+                    .sum()
+                    .reindex(DAY_NAMES.values(), fill_value=0)
+                )
+                st.bar_chart(cal_per_day)
+            else:
+                st.info(
+                    "Cannot plot calories per day because 'day_name' or "
+                    "'calories_kcal' is missing from the optimized plan."
+                )
 
             # Charts
             st.subheader("Cost per day")
