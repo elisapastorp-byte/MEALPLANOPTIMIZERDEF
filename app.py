@@ -531,7 +531,11 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
 
     status = pl.LpStatus[prob.status]
     if status != "Optimal":
-        return None, f"No optimal solution found. Solver status: {status}"
+        # Return the filtered meals so the app can show them to the user
+        return {
+            "status": status,
+            "filtered_meals": filtered.reset_index(drop=True)
+        }, "NO_FEASIBLE_PLAN"
 
     # Build solution DataFrame
     chosen_rows = []
@@ -712,7 +716,40 @@ def main():
             )
 
         if error:
-            st.error(error)
+            # Special handling when the model is infeasible
+            if error == "NO_FEASIBLE_PLAN" and result is not None:
+                st.warning(
+                    "Given the current variety and dietary requirements, the model "
+                    "cannot find a complete 7-day meal plan that satisfies all "
+                    "constraints.\n\n"
+                    "However, the following meals satisfy your filters and can be "
+                    "used as a starting point."
+                )
+    
+                feasible_df = result.get("filtered_meals", None)
+                if feasible_df is not None and not feasible_df.empty:
+                    display_cols = [
+                        "Restaurant", "Meal", "price",
+                        "calories_kcal", "protein_g", "fat_g", "sugar_g"
+                    ]
+                    existing = [c for c in display_cols if c in feasible_df.columns]
+                    st.dataframe(feasible_df[existing])
+                else:
+                    st.info(
+                        "No meals remain after applying all filters. "
+                        "Try relaxing some of the restrictions."
+                    )
+            else:
+                # Any other kind of error
+                st.error(error)
+    else:
+        plan = result["plan"]
+        kpis = result["kpis"]
+
+        st.success(f"Optimization completed. Solver status: {result['status']}")
+
+
+            
         else:
             plan = result["plan"]
             kpis = result["kpis"]
