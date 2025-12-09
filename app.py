@@ -742,19 +742,14 @@ def main():
             else:
                 # Any other kind of error
                 st.error(error)
-    else:
-        plan = result["plan"]
-        kpis = result["kpis"]
-
-        st.success(f"Optimization completed. Solver status: {result['status']}")
-
-
-            
         else:
             plan = result["plan"]
             kpis = result["kpis"]
-
+    
             st.success(f"Optimization completed. Solver status: {result['status']}")
+
+
+
 
             # KPIs
             st.subheader("Key Performance Indicators")
