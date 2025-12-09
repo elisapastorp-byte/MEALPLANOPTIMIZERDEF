@@ -686,6 +686,13 @@ def main():
         "avoid_spicy": avoid_spicy,
         "avoid_fried": avoid_fried,
     }
+    # Notice about computation time
+    st.sidebar.markdown(
+        "<span style='color:#666; font-size:13px;'>"
+        "⚠️ The optimization process may take up to <b>1 minute</b> depending on your selections."
+        "</span>",
+        unsafe_allow_html=True
+    )
 
     if st.sidebar.button("Run optimization"):
         with st.spinner("Running optimization model..."):
