@@ -568,7 +568,8 @@ def main():
     st.markdown(
         "This dashboard builds a 7-day lunch and dinner plan based on a "
         "mixed-integer optimization model with a goal-programming objective. "
-        "Nutritional deviations are penalized more heavily than total cost."
+        "Nutritional deviations are penalized more heavily than total cost,"
+        "since the problem is already adjusted to your max budget"
     )
 
     # Sidebar inputs
