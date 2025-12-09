@@ -2,9 +2,9 @@ import pandas as pd
 import pulp as pl
 import streamlit as st
 
-# --------------------------------------------------
+# -----------------------------
 # Basic configuration
-# --------------------------------------------------
+# -----------------------------
 
 DAY_NAMES = {
     0: "Monday",
@@ -17,7 +17,6 @@ DAY_NAMES = {
 }
 MEAL_TYPES = ["lunch", "dinner"]
 
-# Columnns for the model
 REQUIRED_COLUMNS = [
     "Restaurant", "Meal", "price",
     "calories_kcal", "protein_g", "fat_g", "sugar_g",
@@ -33,14 +32,15 @@ REQUIRED_COLUMNS = [
 ]
 
 
-# --------------------------------------------------
-# Data uploading - if not default document
-# --------------------------------------------------
+# -----------------------------
+# Data loading
+# -----------------------------
 
 def load_meal_data(uploaded_file):
     """
-    Carga el CSV subido por el usuario o, si no hay ninguno,
-    usa lunchplandef3.csv. Valida que existan las columnas necesarias.
+    Load the meal dataset either from a user-uploaded CSV
+    or from the default 'lunchplandef3.csv' file.
+    Column names are trimmed and validated.
     """
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
@@ -49,54 +49,43 @@ def load_meal_data(uploaded_file):
         df = pd.read_csv("lunchplandef3.csv")
         source = "default file (lunchplandef3.csv)"
 
-    # Normalizing columns name
+    # strip leading/trailing spaces in column names
     df = df.rename(columns={c: c.strip() for c in df.columns})
 
-    # checking required columns
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(
-            "The selected dataset does not have the required structure.\n"
-            f"Missing columns: {missing}\n"
-            "Please make sure your CSV contains all required columns."
+            "Dataset does not contain the required columns.\n"
+            f"Missing columns: {missing}"
         )
 
     return df, source
 
 
-# --------------------------------------------------
-# optimization model - goal programming
-# --------------------------------------------------
+# -----------------------------
+# Optimization model
+# -----------------------------
 
 def solve_smart_dining(df, gender, weekly_budget, prefs):
     """
-    Replica el modelo de Colab:
-    - mismos filtros sobre el dataset (constraints 1–19),
-    - mismas restricciones de variedad, fritos, legumbres, etc. (C1–C34),
-    - misma función objetivo de goal programming:
-        min 10 * (desviaciones nutricionales) + 1 * (coste total)
+    Build and solve the weekly meal plan optimization model
+    using a goal-programming objective.
     """
 
-    # --------------------
-    # parameters for queestions
-    # --------------------
+    # User options
     q_diabetic      = prefs.get("diabetic", False)
     q_vegan         = prefs.get("vegan", False)
     q_vegetarian    = prefs.get("vegetarian", False)
     q_pescatarian   = prefs.get("pescatarian", False)
-
     q_celiac        = prefs.get("celiac", False)
     q_lactose       = prefs.get("lactose_intolerant", False)
     q_nut_allergy   = prefs.get("nut_allergy", False)
-
     q_kosher        = prefs.get("kosher", False)
     q_halal         = prefs.get("halal", False)
-
     q_keto          = prefs.get("keto", False)
     q_gain_weight   = prefs.get("gain_weight", False)
     q_lose_weight   = prefs.get("lose_weight", False)
     q_gain_muscle   = prefs.get("gain_muscle", False)
-
     q_avoid_grains  = prefs.get("avoid_grains", False)
     q_avoid_legumes = prefs.get("avoid_legumes", False)
     q_avoid_bread   = prefs.get("avoid_bread", False)
@@ -104,98 +93,69 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     q_avoid_spicy   = prefs.get("avoid_spicy", False)
     q_avoid_fried   = prefs.get("avoid_fried", False)
 
-    # --------------------
-    # 1. Applying filters to the dataset (constraints 1–19)
-    # --------------------
+    # 1. Filter dataset based on user preferences
     filtered = df.copy()
-
-    # 1: diabetic friendly
     if q_diabetic:
         filtered = filtered[filtered["diabetic_friendly"] == 1]
-    # 2: vegan
     if q_vegan:
         filtered = filtered[filtered["vegan"] == 1]
-    # 3: vegetarian
     if q_vegetarian:
         filtered = filtered[filtered["vegetarian"] == 1]
-    # 4: pescatarian
     if q_pescatarian:
         filtered = filtered[filtered["pescatarian"] == 1]
-    # 5: celiac (gluten free)
     if q_celiac:
         filtered = filtered[filtered["contains_gluten"] == 0]
-    # 6: lactose intolerant
     if q_lactose:
         filtered = filtered[filtered["contains_lactose"] == 0]
-    # 7: nut allergy
     if q_nut_allergy:
         filtered = filtered[filtered["contains_nuts"] == 0]
-    # 8: kosher
     if q_kosher:
         filtered = filtered[filtered["kosher"] == 1]
-    # 9: halal
     if q_halal:
         filtered = filtered[filtered["halal"] == 1]
-
-    # 10: keto
     if q_keto:
         filtered = filtered[filtered["keto_friendly"] == 1]
-    # 11: gain weight
     if q_gain_weight:
         filtered = filtered[filtered["gaining_weight_diet"] == 1]
-    # 12: lose weight
     if q_lose_weight:
         filtered = filtered[filtered["loose_weight_diet"] == 1]
-    # 13: gain muscle
     if q_gain_muscle:
         filtered = filtered[filtered["gaining_muscle_diet"] == 1]
-
-    # 14: avoid grains
     if q_avoid_grains:
         filtered = filtered[filtered["contains_grains"] == 0]
-    # 15: avoid legumes
     if q_avoid_legumes:
         filtered = filtered[filtered["contains_legumes"] == 0]
-    # 16: avoid bread
     if q_avoid_bread:
         filtered = filtered[filtered["contains_bread"] == 0]
-    # 17: avoid dairy
     if q_avoid_dairy:
         filtered = filtered[filtered["contains_dairy"] == 0]
-    # 18: avoid spicy
     if q_avoid_spicy:
         filtered = filtered[filtered["spicy"] == 0]
-    # 19: avoid fried
     if q_avoid_fried:
         filtered = filtered[filtered["fried"] == 0]
 
     if len(filtered) < 14:
         return None, f"Not enough meals after filtering. Only {len(filtered)} meals available."
 
-    # --------------------
-    # 2. Nutritional targets
-    # --------------------
+    # 2. Daily nutritional targets by gender
     if gender == "male":
         cal_min       = 1100
         cal_max       = 1600
         protein_min   = 50
         fat_max       = 70
         sugar_max     = 70
-
         calcium_min   = 900
         fiber_min     = 30
         chol_max      = 300
         potassium_min = 3400
         iron_min      = 8
         sodium_max    = 2300
-
-    elif gender == "female":
+    else:  # female
         cal_min       = 900
         cal_max       = 1400
         protein_min   = 45
         fat_max       = 60
         sugar_max     = 60
-
         calcium_min   = 1200
         fiber_min     = 25
         chol_max      = 300
@@ -203,40 +163,22 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         iron_min      = 18
         sodium_max    = 2300
 
-    else:  
-        cal_min       = 1000
-        cal_max       = 1500
-        protein_min   = 45
-        fat_max       = 65
-        sugar_max     = 65
-
-        calcium_min   = 1000
-        fiber_min     = 25
-        chol_max      = 300
-        potassium_min = 3000
-        iron_min      = 10
-        sodium_max    = 2300
-
-    # --------------------
-    # 3. variables definition
-    # --------------------
-    meal_indices = list(filtered.index)          # I
-    days = range(7)                              # D = {0..6}
-    meals = MEAL_TYPES                           # M = {lunch, dinner}
+    # 3. Sets and indices
+    meal_indices = list(filtered.index)
+    days = range(7)
+    meals = MEAL_TYPES
     restaurants = filtered["Restaurant"].unique().tolist()
 
     prob = pl.LpProblem("SmartDiningGoalProgramming", pl.LpMinimize)
 
-    # x[i,d,m] = 1 si el plato i se usa el día d en la comida m
+    # Decision variables: x[i,d,m] = 1 if meal i is chosen on day d, meal m
     x = {}
     for i in meal_indices:
         for d in days:
             for m in meals:
-                x[(i, d, m)] = pl.LpVariable(
-                    f"x_{i}_{d}_{m}", cat="Binary"
-                )
+                x[(i, d, m)] = pl.LpVariable(f"x_{i}_{d}_{m}", cat="Binary")
 
-    # Coste total
+    # Total weekly cost
     total_cost = pl.lpSum(
         filtered.loc[i, "price"] * x[(i, d, m)]
         for i in meal_indices
@@ -244,24 +186,23 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         for m in meals
     )
 
-    # weekly budget 
+    # Weekly budget as a hard constraint
     prob += total_cost <= weekly_budget, "B1_BudgetMaxWeeklyCost"
 
-    # --------------------
-    # 4. Goal programming: deviation variables and soft constraints
-    # --------------------
-    d_cal_under   = {d: pl.LpVariable(f"d_cal_under_day{d}",     lowBound=0) for d in days}
-    d_cal_over    = {d: pl.LpVariable(f"d_cal_over_day{d}",      lowBound=0) for d in days}
-    d_prot_under  = {d: pl.LpVariable(f"d_prot_under_day{d}",    lowBound=0) for d in days}
-    d_fat_over    = {d: pl.LpVariable(f"d_fat_over_day{d}",      lowBound=0) for d in days}
-    d_sugar_over  = {d: pl.LpVariable(f"d_sugar_over_day{d}",    lowBound=0) for d in days}
-    d_calc_under  = {d: pl.LpVariable(f"d_calcium_under_day{d}", lowBound=0) for d in days}
-    d_fiber_under = {d: pl.LpVariable(f"d_fiber_under_day{d}",   lowBound=0) for d in days}
-    d_chol_over   = {d: pl.LpVariable(f"d_chol_over_day{d}",     lowBound=0) for d in days}
-    d_potas_under = {d: pl.LpVariable(f"d_potas_under_day{d}",   lowBound=0) for d in days}
-    d_iron_under  = {d: pl.LpVariable(f"d_iron_under_day{d}",    lowBound=0) for d in days}
-    d_sodium_over = {d: pl.LpVariable(f"d_sodium_over_day{d}",   lowBound=0) for d in days}
+    # 4. Goal-programming deviation variables
+    d_cal_under   = {d: pl.LpVariable(f"d_cal_under_day{d}",    lowBound=0) for d in days}
+    d_cal_over    = {d: pl.LpVariable(f"d_cal_over_day{d}",     lowBound=0) for d in days}
+    d_prot_under  = {d: pl.LpVariable(f"d_prot_under_day{d}",   lowBound=0) for d in days}
+    d_fat_over    = {d: pl.LpVariable(f"d_fat_over_day{d}",     lowBound=0) for d in days}
+    d_sugar_over  = {d: pl.LpVariable(f"d_sugar_over_day{d}",   lowBound=0) for d in days}
+    d_calc_under  = {d: pl.LpVariable(f"d_calcium_under_day{d}",lowBound=0) for d in days}
+    d_fiber_under = {d: pl.LpVariable(f"d_fiber_under_day{d}",  lowBound=0) for d in days}
+    d_chol_over   = {d: pl.LpVariable(f"d_chol_over_day{d}",    lowBound=0) for d in days}
+    d_potas_under = {d: pl.LpVariable(f"d_potas_under_day{d}",  lowBound=0) for d in days}
+    d_iron_under  = {d: pl.LpVariable(f"d_iron_under_day{d}",   lowBound=0) for d in days}
+    d_sodium_over = {d: pl.LpVariable(f"d_sodium_over_day{d}",  lowBound=0) for d in days}
 
+    # Daily nutritional soft constraints
     for d in days:
         calories_day = pl.lpSum(
             filtered.loc[i, "calories_kcal"] * x[(i, d, m)]
@@ -304,7 +245,6 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
             for i in meal_indices for m in meals
         )
 
-        # 6–16: soft constraints
         prob += calories_day + d_cal_under[d]    >= cal_min,       f"C6_CalMinSoft_day{d}"
         prob += calories_day - d_cal_over[d]     <= cal_max,       f"C7_CalMaxSoft_day{d}"
         prob += protein_day + d_prot_under[d]    >= protein_min,   f"C8_ProtMinSoft_day{d}"
@@ -317,36 +257,33 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
         prob += iron_day + d_iron_under[d]       >= iron_min,      f"C15_IronMinSoft_day{d}"
         prob += sodium_day - d_sodium_over[d]    <= sodium_max,    f"C16_SodiumMaxSoft_day{d}"
 
-    # --------------------
-    # 5. "HARD CONSTRAINTS” (C1–C34)
-    # --------------------
+    # 5. Combinatorial constraints
 
-    # 1) Exactamente 1 plato por (día, comida)
+    # Each day and meal type: exactly one meal
     for d in days:
         for m in meals:
             prob += pl.lpSum(
                 x[(i, d, m)] for i in meal_indices
             ) == 1, f"C1_OneMeal_day{d}_{m}"
 
-    # 2) Cada plato como mucho una vez por semana
+    # Each meal at most once per week
     for i in meal_indices:
         prob += pl.lpSum(
             x[(i, d, m)] for d in days for m in meals
         ) <= 1, f"C2_UniqueMeal_{i}"
 
-    # --- Restricciones por restaurante ---
-
-    # 3) Máx 5 comidas de un restaurante en la semana
+    # Restaurant usage constraints
     for r in restaurants:
+        # Max 5 meals from same restaurant per week
         prob += pl.lpSum(
             x[(i, d, m)]
             for i in meal_indices
             for d in days
             for m in meals
             if filtered.loc[i, "Restaurant"] == r
-        ) <= 5, f"C3_Max5Meals_rest{r}"
+        ) <= 5, f"C3_Max5Meals_rest_{r}"
 
-    # 4) Máx 1 comida de cada restaurante por día
+    # Max 1 meal from same restaurant per day
     for d in days:
         for r in restaurants:
             prob += pl.lpSum(
@@ -354,10 +291,9 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
                 for i in meal_indices
                 for m in meals
                 if filtered.loc[i, "Restaurant"] == r
-            ) <= 1, f"C4_MaxOnePerRestaurant_day{d}_rest{r}"
+            ) <= 1, f"C4_MaxOnePerRestaurant_day{d}_rest_{r}"
 
-    # 5) Mismo restaurante no puede repetirse en días consecutivos
-    #    en la misma comida (lunch/dinner)
+    # Avoid same restaurant on consecutive days for the same meal type
     for d in range(len(days) - 1):
         for r in restaurants:
             for m in meals:
@@ -373,147 +309,111 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
                         for i in meal_indices
                         if filtered.loc[i, "Restaurant"] == r
                     )
-                ) <= 1, f"C5_NoSameRestConsecutive_{m}_day{d}_rest{r}"
+                ) <= 1, f"C5_NoSameRestConsecutive_{m}_day{d}_rest_{r}"
 
-    # --- Contenido semanal ---
-
-    # 17) Máx 2 comidas fritas a la semana
+    # Weekly content constraints
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "fried"] == 1
-    ) <= 2, "C17_MaxFried"
+    ) <= 2, "C17_MaxFriedWeek"
 
-    # 18) Al menos 3 comidas grilled a la semana
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "grilled"] == 1
-    ) >= 3, "C18_MinGrilled"
+    ) >= 3, "C18_MinGrilledWeek"
 
-    # 19) Al menos 2 comidas baked a la semana
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "baked"] == 1
-    ) >= 2, "C19_MinBaked"
+    ) >= 2, "C19_MinBakedWeek"
 
-    # 20) Al menos 1 comida boiled a la semana
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "boiled"] == 1
-    ) >= 1, "C20_MinBoiled"
+    ) >= 1, "C20_MinBoiledWeek"
 
-    # 21) Al menos 2 comidas con legumbres a la semana
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "contains_legumes"] == 1
-    ) >= 2, "C21_MinLegumes"
+    ) >= 2, "C21_MinLegumesWeek"
 
-    # 22) Máx 5 comidas con pan a la semana
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "contains_bread"] == 1
-    ) <= 5, "C22_MaxBread"
+    ) <= 5, "C22_MaxBreadWeek"
 
-    # 23) Al menos 1 comida sin cereales (grain-free) a la semana
     prob += pl.lpSum(
         x[(i, d, m)]
-        for i in meal_indices
-        for d in days
-        for m in meals
+        for i in meal_indices for d in days for m in meals
         if filtered.loc[i, "contains_grains"] == 0
-    ) >= 1, "C23_MinGrainFree"
+    ) >= 1, "C23_MinGrainFreeWeek"
 
-    # --- Restricciones diarias de preparación/composición ---
-
-    # 24) Máx 1 comida frita por día
+    # Daily constraints on fried and composition
     for d in days:
+        # Max 1 fried meal per day
         prob += pl.lpSum(
             x[(i, d, m)]
-            for i in meal_indices
-            for m in meals
+            for i in meal_indices for m in meals
             if filtered.loc[i, "fried"] == 1
-        ) <= 1, f"C24_MaxFried_day{d}"
+        ) <= 1, f"C24_MaxFriedPerDay_{d}"
 
-    # 25) Al menos 1 comida alta en proteína por día (protein >= 25g)
-    for d in days:
+        # At least one high-protein meal per day (protein >= 25g)
         prob += pl.lpSum(
             x[(i, d, m)]
-            for i in meal_indices
-            for m in meals
+            for i in meal_indices for m in meals
             if filtered.loc[i, "protein_g"] >= 25
-        ) >= 1, f"C25_MinHighProtein_day{d}"
+        ) >= 1, f"C25_MinHighProteinPerDay_{d}"
 
-    # 26) Calorías del lunch >= calorías de la cena cada día
-    for d in days:
+        # Lunch calories >= dinner calories
         prob += pl.lpSum(
             filtered.loc[i, "calories_kcal"] * x[(i, d, "lunch")]
             for i in meal_indices
         ) >= pl.lpSum(
             filtered.loc[i, "calories_kcal"] * x[(i, d, "dinner")]
             for i in meal_indices
-        ), f"C26_LunchMoreCal_day{d}"
+        ), f"C26_LunchMoreCalories_{d}"
 
-    # 27) No legumbres en la cena (ningún día)
-    for d in days:
+        # No legumes at dinner
         prob += pl.lpSum(
             x[(i, d, "dinner")]
             for i in meal_indices
             if filtered.loc[i, "contains_legumes"] == 1
-        ) == 0, f"C27_NoLegumesDinner_day{d}"
+        ) == 0, f"C27_NoLegumesDinner_{d}"
 
-    # 28) No cereales (grains) en la cena
-    for d in days:
+        # No grains at dinner
         prob += pl.lpSum(
             x[(i, d, "dinner")]
             for i in meal_indices
             if filtered.loc[i, "contains_grains"] == 1
-        ) == 0, f"C28_NoGrainsDinner_day{d}"
+        ) == 0, f"C28_NoGrainsDinner_{d}"
 
-    # --- Patrones de días consecutivos ---
-
-    # 29) No legumbres en dos días consecutivos (en ninguna comida)
+    # Consecutive-day patterns
     for idx in range(len(days) - 1):
         d = days[idx]
         d_next = days[idx + 1]
 
+        # No legumes on two consecutive days
         prob += (
             pl.lpSum(
                 x[(i, d, m)]
-                for i in meal_indices
-                for m in meals
+                for i in meal_indices for m in meals
                 if filtered.loc[i, "contains_legumes"] == 1
             )
             +
             pl.lpSum(
                 x[(i, d_next, m)]
-                for i in meal_indices
-                for m in meals
+                for i in meal_indices for m in meals
                 if filtered.loc[i, "contains_legumes"] == 1
             )
-        ) <= 1, f"C29_NoConsecutiveLegumes_days{d}_{d_next}"
+        ) <= 1, f"C29_NoConsecutiveLegumes_{d}_{d_next}"
 
-    # 30) No fritos en días consecutivos a la hora de comer (lunch)
-    for idx in range(len(days) - 1):
-        d = days[idx]
-        d_next = days[idx + 1]
-
+        # No fried lunch on two consecutive days
         prob += (
             pl.lpSum(
                 x[(i, d, "lunch")]
@@ -526,13 +426,9 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
                 for i in meal_indices
                 if filtered.loc[i, "fried"] == 1
             )
-        ) <= 1, f"C30_NoConsecutiveFriedLunch_days{d}_{d_next}"
+        ) <= 1, f"C30_NoConsecutiveFriedLunch_{d}_{d_next}"
 
-    # 31) No fritos en días consecutivos a la cena (dinner)
-    for idx in range(len(days) - 1):
-        d = days[idx]
-        d_next = days[idx + 1]
-
+        # No fried dinner on two consecutive days
         prob += (
             pl.lpSum(
                 x[(i, d, "dinner")]
@@ -545,40 +441,33 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
                 for i in meal_indices
                 if filtered.loc[i, "fried"] == 1
             )
-        ) <= 1, f"C31_NoConsecutiveFriedDinner_days{d}_{d_next}"
+        ) <= 1, f"C31_NoConsecutiveFriedDinner_{d}_{d_next}"
 
-    # --- SPECIAL CONSTRAINTS ---
-
-    # 32) IF-THEN: Si hay frito en el día -> proteína alta
+    # Conditional constraints (IF-THEN and EITHER-OR)
     BIG_M = 1000
-    HIGH_PROTEIN_IF_FRIED = 60
 
+    # If a day includes fried food, total protein that day must be high
     z_fried = {d: pl.LpVariable(f"z_fried_day{d}", cat="Binary") for d in days}
+    HIGH_PROTEIN_IF_FRIED = 60
 
     for d in days:
         fried_day = pl.lpSum(
             x[(i, d, m)]
-            for i in meal_indices
-            for m in meals
+            for i in meal_indices for m in meals
             if filtered.loc[i, "fried"] == 1
         )
-
-        # Enlazar fried_day y z_fried[d]
-        prob += fried_day >= z_fried[d],                 f"C32_FriedLinkLB_day{d}"
-        prob += fried_day <= BIG_M * z_fried[d],         f"C32_FriedLinkUB_day{d}"
-
         protein_day = pl.lpSum(
             filtered.loc[i, "protein_g"] * x[(i, d, m)]
             for i in meal_indices for m in meals
         )
 
-        # Si z_fried[d] = 1 -> proteína >= HIGH_PROTEIN_IF_FRIED
+        prob += fried_day >= z_fried[d],             f"C32_FriedLinkLB_day{d}"
+        prob += fried_day <= BIG_M * z_fried[d],      f"C32_FriedLinkUB_day{d}"
         prob += protein_day >= HIGH_PROTEIN_IF_FRIED - BIG_M * (1 - z_fried[d]), \
                 f"C32_IfFriedThenHighProtein_day{d}"
 
-    # 33) EITHER-OR: Día bajo en calorías O día alto en proteína
+    # Either low-calorie or high-protein day
     y_balance = {d: pl.LpVariable(f"y_balance_day{d}", cat="Binary") for d in days}
-
     LOW_CAL_MAX = cal_max - 200
     HIGH_PROTEIN_MIN = protein_min + 10
 
@@ -592,17 +481,13 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
             for i in meal_indices for m in meals
         )
 
-        # Si y=0 -> se aplica límite estricto de calorías
         prob += calories_day <= LOW_CAL_MAX + BIG_M * y_balance[d], \
                 f"C33_EitherLowCal_day{d}"
-
-        # Si y=1 -> se aplica requisito de proteína alta
         prob += protein_day >= HIGH_PROTEIN_MIN - BIG_M * (1 - y_balance[d]), \
                 f"C33_OrHighProtein_day{d}"
 
-    # 34) EITHER-OR: Día bajo en grasa O bajo en sodio
+    # Either low-fat or low-sodium day
     y_fat_sodium = {d: pl.LpVariable(f"y_fat_sodium_day{d}", cat="Binary") for d in days}
-
     FAT_LOW_MAX = fat_max - 10
     SODIUM_LOW_MAX = sodium_max - 400
 
@@ -616,17 +501,12 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
             for i in meal_indices for m in meals
         )
 
-        # Si y=0 -> low-fat
         prob += fat_day <= FAT_LOW_MAX + BIG_M * y_fat_sodium[d], \
                 f"C34_EitherLowFat_day{d}"
-
-        # Si y=1 -> low-sodium
         prob += sodium_day <= SODIUM_LOW_MAX + BIG_M * (1 - y_fat_sodium[d]), \
                 f"C34_OrLowSodium_day{d}"
 
-    # --------------------
-    # 6. GOAL PROGRAMMING - OBJECTIVE
-    # --------------------
+    # 6. Goal-programming objective: deviations have higher weight than cost
     total_deviation = pl.lpSum(
         d_cal_under[d]  + d_cal_over[d]  +
         d_prot_under[d] + d_fat_over[d]  +
@@ -638,20 +518,18 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     )
 
     W_NUTRITION = 10
-    W_COST      = 1
-
+    W_COST = 1
     prob += W_NUTRITION * total_deviation + W_COST * total_cost, "GoalObjective"
 
-    # --------------------
-    # 7. SOLVING AND BUILDING PLAN
-    # --------------------
+    # 7. Solve model
     solver = pl.PULP_CBC_CMD(msg=False, timeLimit=60, gapRel=0.01)
     prob.solve(solver)
 
     status = pl.LpStatus[prob.status]
     if status != "Optimal":
-        return None, f"No optimal solution found. Status: {status}"
+        return None, f"No optimal solution found. Solver status: {status}"
 
+    # Build solution DataFrame
     chosen_rows = []
     for d in days:
         for m in meals:
@@ -665,7 +543,7 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
 
     plan = pd.DataFrame(chosen_rows)
     if plan.empty:
-        return None, "Solver returned no chosen meals."
+        return None, "Solver returned an empty plan."
 
     kpis = {
         "total_cost": plan["price"].sum(),
@@ -676,34 +554,35 @@ def solve_smart_dining(df, gender, weekly_budget, prefs):
     return {"plan": plan, "kpis": kpis, "status": status}, None
 
 
-# --------------------------------------------------
+# -----------------------------
 # Streamlit app
-# --------------------------------------------------
+# -----------------------------
 
 def main():
     st.set_page_config(
-        page_title="Smart Dining on Campus (Goal Programming)",
+        page_title="Smart Dining on Campus",
         layout="wide",
     )
 
-    st.title("Smart Dining - Weekly Planner")
+    st.title("Smart Dining on Campus – Weekly Planner")
     st.markdown(
-        "This dashboard builds a **7-day lunch & dinner plan"
+        "This dashboard builds a 7-day lunch and dinner plan based on a "
+        "mixed-integer optimization model with a goal-programming objective. "
+        "Nutritional deviations are penalized more heavily than total cost."
     )
 
-    # Sidebar: inputs
+    # Sidebar inputs
     st.sidebar.header("User & Preferences")
 
     st.sidebar.write(
-        "You can upload your own **CSV** file with meal data. "
+        "You can upload your own CSV file with meal data. "
         "If you do not upload any file, the default dataset "
         "`lunchplandef3.csv` will be used."
     )
 
     with st.sidebar.expander("Required CSV structure", expanded=False):
         st.markdown(
-            "**The CSV must contain at least these columns (exact names, "
-            "extra columns are allowed):**\n\n"
+            "The CSV must contain at least these columns (exact names):\n\n"
             ", ".join(f"`{c}`" for c in REQUIRED_COLUMNS)
         )
 
@@ -726,7 +605,7 @@ def main():
         step=5.0,
     )
 
-    # QUESTIONS
+    # Preferences
     st.sidebar.subheader("Health / conditions")
     diabetic = st.sidebar.checkbox("Diabetic (diabetic-friendly meals)", value=False)
 
@@ -803,7 +682,7 @@ def main():
             plan = result["plan"]
             kpis = result["kpis"]
 
-            st.success(f"Optimization completed. Status: {result['status']}")
+            st.success(f"Optimization completed. Solver status: {result['status']}")
 
             # KPIs
             st.subheader("Key Performance Indicators")
@@ -812,38 +691,40 @@ def main():
             c2.metric("Avg daily cost (USD)", f"{kpis['avg_daily_cost']:.2f}")
             c3.metric("Avg daily calories (kcal)", f"{kpis['avg_daily_calories']:.0f}")
 
-            # Detailed plan
+            # Weekly plan table (no sort_values to avoid key errors)
             st.subheader("Weekly meal plan")
             display_cols = [
-                "day_name", "meal_type",
+                "day", "day_name", "meal_type",
                 "Restaurant", "Meal",
                 "price", "calories_kcal",
                 "protein_g", "fat_g", "sugar_g",
             ]
             existing = [c for c in display_cols if c in plan.columns]
-            st.dataframe(plan[existing].sort_values(["day", "meal_type"]))
+            st.dataframe(plan[existing])
 
-            # Graphs
+            # Charts
             st.subheader("Cost per day")
-            cost_per_day = (
-                plan.groupby("day_name")["price"]
-                .sum()
-                .reindex(DAY_NAMES.values(), fill_value=0)
-            )
-            st.bar_chart(cost_per_day)
+            if "day_name" in plan.columns and "price" in plan.columns:
+                cost_per_day = (
+                    plan.groupby("day_name")["price"]
+                    .sum()
+                    .reindex(DAY_NAMES.values(), fill_value=0)
+                )
+                st.bar_chart(cost_per_day)
 
             st.subheader("Calories per day")
-            cal_per_day = (
-                plan.groupby("day_name")["calories_kcal"]
-                .sum()
-                .reindex(DAY_NAMES.values(), fill_value=0)
-            )
-            st.bar_chart(cal_per_day)
+            if "day_name" in plan.columns and "calories_kcal" in plan.columns:
+                cal_per_day = (
+                    plan.groupby("day_name")["calories_kcal"]
+                    .sum()
+                    .reindex(DAY_NAMES.values(), fill_value=0)
+                )
+                st.bar_chart(cal_per_day)
 
     else:
         st.info(
             "Upload a CSV file (optional), set your preferences and click "
-            "**Run optimization** to see a weekly plan."
+            "**Run optimization** to generate a weekly meal plan."
         )
 
 
