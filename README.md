@@ -1,6 +1,6 @@
-# 🍽️ Smart Dining on Campus - Weekly Meal Optimizer
+# Smart Dining on Campus - Weekly Meal Optimizer
 
-An interactive dashboard that creates personalized weekly meal plans using linear programming optimization.
+An interactive dashboard that creates personalized weekly meal plans using linear programming optimization and goal programming.
 
 ## Features
 
@@ -44,10 +44,4 @@ The system automatically applies:
 - **Pandas**: Data manipulation
 - **Plotly**: Interactive charts
 
-## Author
 
-Operations Research Project - University Course
-
-## License
-
-Educational Use Only
