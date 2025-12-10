@@ -42,21 +42,37 @@ def load_meal_data(uploaded_file):
     or from the default 'lunchplandef3.csv' file.
     Column names are trimmed and validated.
     """
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        source = "uploaded file"
-    else:
-        df = pd.read_csv("lunchplandef3.csv")
-        source = "default file (lunchplandef3.csv)"
+    try:
+        if uploaded_file is not None:
+            df = pd.read_csv(uploaded_file)
+            source = "uploaded file"
+        else:
+            df = pd.read_csv("lunchplandef3.csv")
+            source = "default file (lunchplandef3.csv)"
+    except pd.errors.ParserError:
+        # CSV structure is broken (wrong separator, merged columns, etc.)
+        raise ValueError(
+            "The uploaded file could not be read as a valid CSV.\n\n"
+            "Please make sure that:\n"
+            "• The file is saved in CSV format (comma-separated).\n"
+            "• There is a single header row.\n"
+            "• There are no merged cells or extra delimiters.\n\n"
+            "If you exported the file from Excel, use 'Save as' → "
+            "'CSV (Comma delimited)'."
+        )
 
     # strip leading/trailing spaces in column names
     df = df.rename(columns={c: c.strip() for c in df.columns})
 
+    # Check that all required columns exist
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(
-            "Dataset does not contain the required columns.\n"
-            f"Missing columns: {missing}"
+            "The selected dataset does not have the required structure.\n\n"
+            "Missing columns:\n"
+            f"{', '.join(missing)}\n\n"
+            "The CSV must include at least the following columns:\n"
+            f"{', '.join(REQUIRED_COLUMNS)}"
         )
 
     return df, source
